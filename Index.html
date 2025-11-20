@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>SG Geology Map Overlay </title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    #search-box {
+      position: absolute;
+      top: 10px;
+      left: 50px;
+      z-index: 1000;
+      background: white;
+      padding: 6px;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,.2);
+    }
+    #search-input {
+      width: 240px;
+      padding: 4px 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="search-box">
+    <input id="search-input" type="text" placeholder="Address or Postcode">
+    <button id="search-btn">Search</button>
+  </div>
+
+  <div id="opacity-control" style="
+    position: absolute;
+    top: 60px;
+    left: 50px;
+    z-index: 1000;
+    background: white;
+    padding: 6px 10px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2);
+    font-size: 12px;">
+    Opacity:
+    <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="0.6">
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // 1. 初始化地图（以新加坡为中心）
+    const map = L.map("map").setView([1.3521, 103.8198], 12);
+
+    // 2. OSM 瓦片图层
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    // 3. PDF 转图后的 overlay（用地理坐标绑定）
+    // 这里 latLngBounds 需要你自己算/量：
+    // 假设左上角和右下角经纬度如下（示例）
+    const imgBounds = L.latLngBounds(
+      [1.4929, 103.5781], // 北西 (lat, lng)
+      [1.1123, 104.1122]  // 南东 (lat, lng)
+    );
+
+    const overlay = L.imageOverlay("map.jpg", imgBounds, {
+      opacity: 0.6,  // 半透明，方便看到底图和上面的色块
+    }).addTo(map);
+
+    // 4. 简单地址搜索（用 Nominatim 示例；生产环境最好自己加后端做代理）
+    const input = document.getElementById("search-input");
+    const btn = document.getElementById("search-btn");
+
+    async function searchAddress(q) {
+      if (!q.trim()) return;
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="
+        + encodeURIComponent(q + ", Singapore");
+
+      try {
+        const res = await fetch(url, {
+          headers: {
+            "Accept-Language": "en",
+            "User-Agent": "your-app-name" // 实际项目建议自定义
+          }
+        });
+        const data = await res.json();
+        if (!data.length) {
+          alert("Address not found, try postcode input");
+          return;
+        }
+        const place = data[0];
+        const lat = parseFloat(place.lat);
+        const lon = parseFloat(place.lon);
+        map.setView([lat, lon], 17);
+
+        L.marker([lat, lon]).addTo(map)
+          .bindPopup(q)
+          .openPopup();
+      } catch (err) {
+        console.error(err);
+        alert("Search failed, try again");
+      }
+    }
+
+    btn.addEventListener("click", () => searchAddress(input.value));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") searchAddress(input.value);
+    });
+
+    const slider = document.getElementById("opacity-slider");
+
+    slider.addEventListener("input", () => {
+      const value = parseFloat(slider.value);
+      overlay.setOpacity(value);
+    });
+
+  </script>
+</body>
+</html>
