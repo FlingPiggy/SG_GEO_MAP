@@ -34,6 +34,19 @@
       width: 240px;
       padding: 4px 6px;
     }
+    #copy-screenshot-btn {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,.2);
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -41,6 +54,9 @@
     <input id="search-input" type="text" placeholder="Address or Postcode">
     <button id="search-btn">Search</button>
   </div>
+
+  <!-- Copy Screenshot 按钮（右上角） -->
+  <button id="copy-screenshot-btn">Copy Screenshot</button>
 
   <div id="opacity-control" style="
     position: absolute;
@@ -61,11 +77,21 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
+  <!-- 用 html2canvas 来截图 -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
   <script>
     // 1. 初始化地图（以新加坡为中心）
-    const map = L.map("map").setView([1.3521, 103.8198], 12);
+    // 修改原本的初始化，强制所有矢量图层使用 Canvas 渲染，避免 SVG + transform 导致截图偏移
+    const map = L.map("map", {
+      renderer: L.canvas()   // <--- 关键
+    }).setView([1.3521, 103.8198], 12);
+
     let searchMarker = null;
+
+    window.addEventListener('load', () => {
+      map.invalidateSize();
+    });
 
     // 用来存放画出来的 polygon 的图层组
     const drawnItems = new L.FeatureGroup();
@@ -78,7 +104,6 @@
           allowIntersection: false, // 不允许边自交
           showArea: true,           // 显示面积（m²）
           shapeOptions: {
-            // 这里可以自定义颜色、线宽等，不写就用默认
             color: 'red',
             fillOpacity: 0.15
           }
@@ -90,7 +115,7 @@
         circlemarker: false
       },
       edit: {
-        featureGroup: drawnItems,   // 允许编辑 / 删除 featureGroup 里的图形
+        featureGroup: drawnItems,
       }
     });
 
@@ -103,15 +128,13 @@
     }).addTo(map);
 
     // 3. PDF 转图后的 overlay（用地理坐标绑定）
-    // 这里 latLngBounds 需要你自己算/量：
-    // 假设左上角和右下角经纬度如下（示例）
     const imgBounds = L.latLngBounds(
       [1.4929, 103.57815], // 北西 (lat, lng)
       [1.1123, 104.11225]  // 南东 (lat, lng)
     );
 
     const overlay = L.imageOverlay("map.jpg", imgBounds, {
-      opacity: 0.6,  // 半透明，方便看到底图和上面的色块
+      opacity: 0.6,
     }).addTo(map);
 
     // 4. 简单地址搜索（用 Nominatim 示例）
@@ -128,7 +151,7 @@
         const res = await fetch(url, {
           headers: {
             "Accept-Language": "en",
-            "User-Agent": "your-app-name" // 项目自定义
+            "User-Agent": "your-app-name"
           }
         });
         const data = await res.json();
@@ -141,7 +164,7 @@
         const lon = parseFloat(place.lon);
         map.setView([lat, lon], 17);
 
-     // delete last marker
+        // delete last marker
         if (searchMarker) {
           map.removeLayer(searchMarker);
           searchMarker = null;
@@ -184,7 +207,73 @@
       sitePolygon = layer;
     });
 
+    // ===== Copy Screenshot 逻辑 =====
+    const copyBtn = document.getElementById("copy-screenshot-btn");
+
+    copyBtn.addEventListener("click", async () => {
+      const mapEl = document.getElementById("map");
+
+      // 要临时隐藏的元素（搜索框、opacity 控制、所有按钮/控件）
+      const toHide = [
+        document.getElementById("search-box"),
+        document.getElementById("opacity-control"),
+        document.getElementById("copy-screenshot-btn"),
+        //...document.querySelectorAll(".leaflet-control")  // Leaflet 默认控件（zoom, draw toolbar等）
+      ];
+
+      // 记录原来的 visibility，方便恢复
+      const originalVisibility = new Map();
+      toHide.forEach(el => {
+        if (el) {
+          originalVisibility.set(el, el.style.visibility);
+          el.style.visibility = "hidden";
+        }
+      });
+
+      try {
+        const canvas = await html2canvas(mapEl, {
+          useCORS: true
+        });
+
+        // 截回来了以后先恢复 UI
+        toHide.forEach(el => {
+          if (el) {
+            el.style.visibility = originalVisibility.get(el) || "";
+          }
+        });
+
+        // 尝试复制到剪贴板（需要 https & 支持 Clipboard API 的浏览器）
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+
+          if (navigator.clipboard && window.ClipboardItem) {
+            try {
+              const item = new ClipboardItem({ [blob.type]: blob });
+              await navigator.clipboard.write([item]);
+              alert("Screenshot copied to clipboard!");
+            } catch (err) {
+              console.error("Clipboard write failed:", err);
+              // 失败则打开新标签页
+              const url = canvas.toDataURL("image/png");
+              window.open(url, "_blank");
+            }
+          } else {
+            // 不支持剪贴板，就直接打开图片
+            const url = canvas.toDataURL("image/png");
+            window.open(url, "_blank");
+          }
+        }, "image/png");
+      } catch (err) {
+        console.error("Screenshot failed:", err);
+        // 出错也要恢复 UI
+        toHide.forEach(el => {
+          if (el) {
+            el.style.visibility = originalVisibility.get(el) || "";
+          }
+        });
+        alert("Screenshot failed, please try again.");
+      }
+    });
   </script>
 </body>
 </html>
-
