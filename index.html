@@ -298,14 +298,19 @@
       attribution: "&copy; OpenStreetMap"
     }).addTo(map);
 
-    // === Geology overlay ===
+    // === Geology overlay (tiled) ===
     const imgBounds = L.latLngBounds(
       [1.4929, 103.57815],
       [1.1123, 104.11225]
     );
 
-    const overlay = L.imageOverlay("map.jpg", imgBounds, {
+    const overlay = L.tileLayer("tiles/{z}/{x}/{y}.jpg", {
+      maxNativeZoom: 16,
+      maxZoom: 19,
+      minZoom: 11,
       opacity: 0.6,
+      bounds: imgBounds,
+      errorTileUrl: '',
     }).addTo(map);
 
     // === Opacity slider ===

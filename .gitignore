@@ -1,0 +1,21 @@
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Tile processing (venv, scripts, intermediate files)
+tile_processing/
+
+# Source/reference files (not needed for deployment)
+REF/
+map.jpg
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
