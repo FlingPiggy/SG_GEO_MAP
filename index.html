@@ -1,277 +1,511 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>SG Geology Map Overlay </title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
-  />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>SG Geology Map Overlay</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <style>
     html, body {
       margin: 0;
       height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     #map {
       width: 100%;
       height: 100%;
     }
-    #search-box {
+
+    /* Unified toolbar */
+    #toolbar {
       position: absolute;
       top: 10px;
       left: 50px;
       z-index: 1000;
       background: white;
-      padding: 6px;
-      border-radius: 4px;
-      box-shadow: 0 2px 4px rgba(0,0,0,.2);
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      max-width: calc(100% - 70px);
+    }
+
+    /* Search container */
+    .search-container {
+      position: relative;
+      flex: 1 1 200px;
+      min-width: 180px;
     }
     #search-input {
-      width: 240px;
-      padding: 4px 6px;
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+      outline: none;
     }
-    #copy-screenshot-btn {
+    #search-input:focus {
+      border-color: #4a90d9;
+    }
+
+    /* Search dropdown */
+    #search-results {
+      display: none;
       position: absolute;
-      top: 10px;
-      right: 20px;
-      z-index: 1000;
+      top: 100%;
+      left: 0;
+      right: 0;
       background: white;
       border: 1px solid #ccc;
-      padding: 6px 10px;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      box-shadow: 0 4px 8px rgba(0,0,0,.15);
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 1001;
+    }
+    .search-result-item {
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid #eee;
+    }
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
+    .search-result-item:hover,
+    .search-result-item.active {
+      background: #e8f0fe;
+    }
+    .search-result-item .result-title {
+      font-weight: 500;
+    }
+    .search-result-item .result-addr {
+      color: #666;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    /* Screenshot button */
+    #copy-screenshot-btn {
+      background: white;
+      border: 1px solid #ccc;
       border-radius: 4px;
       cursor: pointer;
-      box-shadow: 0 2px 4px rgba(0,0,0,.2);
+      font-size: 18px;
+      padding: 4px 8px;
+      min-width: 36px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    #copy-screenshot-btn:hover {
+      background: #f0f0f0;
+    }
+
+    /* Opacity control */
+    .opacity-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 12px;
+      color: #555;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    #opacity-slider {
+      width: 100px;
+      cursor: pointer;
+    }
+
+    /* Toast notification */
+    #toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: #323232;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      box-shadow: 0 3px 10px rgba(0,0,0,.3);
+      opacity: 0;
+      transform: translateX(40px);
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: auto;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .toast.error {
+      background: #d32f2f;
+    }
+
+    /* Delete button in popups */
+    .delete-btn {
+      background: #e53935;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .delete-btn:hover {
+      background: #c62828;
+    }
+
+    /* Mobile */
+    @media (max-width: 600px) {
+      #toolbar {
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        max-width: none;
+        padding: 8px;
+        gap: 8px;
+      }
+      .search-container {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+      .opacity-control {
+        flex: 1 1 100%;
+      }
+      #opacity-slider {
+        flex: 1;
+        width: auto;
+      }
+      #copy-screenshot-btn {
+        min-height: 44px;
+        min-width: 44px;
+      }
+      .leaflet-draw-toolbar a {
+        width: 30px;
+        height: 30px;
+      }
     }
   </style>
 </head>
 <body>
-  <div id="search-box">
-    <input id="search-input" type="text" placeholder="Address or Postcode">
-    <button id="search-btn">Search</button>
+
+  <!-- Unified toolbar -->
+  <div id="toolbar">
+    <div class="search-container">
+      <input id="search-input" type="text" placeholder="Search address, building, or postal code" autocomplete="off" />
+      <div id="search-results"></div>
+    </div>
+    <button id="copy-screenshot-btn" title="Copy Screenshot">&#x1F4F7;</button>
+    <div class="opacity-control">
+      <label for="opacity-slider">Opacity</label>
+      <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="0.6" />
+    </div>
   </div>
 
-  <!-- Copy Screenshot 按钮（右上角） -->
-  <button id="copy-screenshot-btn">Copy Screenshot</button>
-
-  <div id="opacity-control" style="
-    position: absolute;
-    top: 60px;
-    left: 50px;
-    z-index: 1000;
-    background: white;
-    padding: 6px 10px;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,.2);
-    font-size: 12px;">
-    Opacity:
-    <input type="range" id="opacity-slider" min="0" max="1" step="0.05" value="0.6">
-  </div>
+  <!-- Toast container -->
+  <div id="toast-container"></div>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-
-  <!-- 用 html2canvas 来截图 -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
   <script>
-    // 1. 初始化地图（以新加坡为中心）
-    // 修改原本的初始化，强制所有矢量图层使用 Canvas 渲染，避免 SVG + transform 导致截图偏移
+    // === Toast notification ===
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (type === 'error' ? ' error' : '');
+      toast.textContent = message;
+      container.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // === Map initialization ===
+    const sgBounds = L.latLngBounds([1.1, 103.55], [1.5, 104.15]);
+
     const map = L.map("map", {
-      renderer: L.canvas()   // <--- 关键
+      renderer: L.canvas(),
+      maxBounds: sgBounds.pad(0.1),
+      minZoom: 11
     }).setView([1.3521, 103.8198], 12);
 
     let searchMarker = null;
 
-    window.addEventListener('load', () => {
-      map.invalidateSize();
-    });
+    window.addEventListener('load', () => map.invalidateSize());
 
-    // 用来存放画出来的 polygon 的图层组
+    // === Drawn items layer ===
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
-    // 只开放 polygon 绘制功能，其它都关掉（你也可以按需打开）
+    // === Draw control: Polygon + Marker ===
     const drawControl = new L.Control.Draw({
       draw: {
         polygon: {
-          allowIntersection: false, // 不允许边自交
-          showArea: true,           // 显示面积（m²）
+          allowIntersection: false,
+          showArea: true,
           shapeOptions: {
             color: 'red',
             fillOpacity: 0.15
           }
         },
+        marker: true,
         polyline: false,
         rectangle: false,
         circle: false,
-        marker: false,
         circlemarker: false
       },
       edit: {
         featureGroup: drawnItems,
       }
     });
-
     map.addControl(drawControl);
 
-    // 2. OSM 瓦片图层
+    // === OSM tile layer ===
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap"
     }).addTo(map);
 
-    // 3. PDF 转图后的 overlay（用地理坐标绑定）
+    // === Geology overlay ===
     const imgBounds = L.latLngBounds(
-      [1.4929, 103.57815], // 北西 (lat, lng)
-      [1.1123, 104.11225]  // 南东 (lat, lng)
+      [1.4929, 103.57815],
+      [1.1123, 104.11225]
     );
 
     const overlay = L.imageOverlay("map.jpg", imgBounds, {
       opacity: 0.6,
     }).addTo(map);
 
-    // 4. 简单地址搜索（用 Nominatim 示例）
-    const input = document.getElementById("search-input");
-    const btn = document.getElementById("search-btn");
-
-    async function searchAddress(q) {
-      if (!q.trim()) return;
-      const url =
-        "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="
-        + encodeURIComponent(q + ", Singapore");
-
-      try {
-        const res = await fetch(url, {
-          headers: {
-            "Accept-Language": "en",
-            "User-Agent": "your-app-name"
-          }
-        });
-        const data = await res.json();
-        if (!data.length) {
-          alert("Address not found, try postcode input");
-          return;
-        }
-        const place = data[0];
-        const lat = parseFloat(place.lat);
-        const lon = parseFloat(place.lon);
-        map.setView([lat, lon], 17);
-
-        // delete last marker
-        if (searchMarker) {
-          map.removeLayer(searchMarker);
-          searchMarker = null;
-        }
-
-        searchMarker = L.marker([lat, lon]).addTo(map)
-          .bindPopup(q)
-          .openPopup();
-
-      } catch (err) {
-        console.error(err);
-        alert("Search failed, try again");
-      }
-    }
-
-    btn.addEventListener("click", () => searchAddress(input.value));
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") searchAddress(input.value);
-    });
-
+    // === Opacity slider ===
     const slider = document.getElementById("opacity-slider");
-
     slider.addEventListener("input", () => {
-      const value = parseFloat(slider.value);
-      overlay.setOpacity(value);
+      overlay.setOpacity(parseFloat(slider.value));
     });
 
-    // 如果你只想地图上永远只保留一个 site area polygon：
-    let sitePolygon = null;
+    // === Drawing: multi-shape with click-to-delete ===
+    function bindDeletePopup(layer, label) {
+      layer.on('click', function () {
+        const popup = L.popup()
+          .setLatLng(layer instanceof L.Marker ? layer.getLatLng() : layer.getBounds().getCenter())
+          .setContent('<button class="delete-btn">Delete this ' + label + '</button>');
+        popup.openOn(map);
+        // Attach event after popup opens
+        setTimeout(() => {
+          const btn = document.querySelector('.leaflet-popup-content .delete-btn');
+          if (btn) {
+            btn.addEventListener('click', () => {
+              drawnItems.removeLayer(layer);
+              map.closePopup();
+            });
+          }
+        }, 50);
+      });
+    }
 
     map.on(L.Draw.Event.CREATED, function (e) {
       const layer = e.layer;
-
-      // 删除之前画的 polygon（只保留一个）
-      if (sitePolygon) {
-        drawnItems.removeLayer(sitePolygon);
-      }
-
       drawnItems.addLayer(layer);
-      sitePolygon = layer;
+      const label = e.layerType === 'marker' ? 'marker' : 'area';
+      bindDeletePopup(layer, label);
     });
 
-    // ===== Copy Screenshot 逻辑 =====
+    // === Search: OneMap API ===
+    const searchInput = document.getElementById("search-input");
+    const searchResults = document.getElementById("search-results");
+    let debounceTimer = null;
+    let activeIndex = -1;
+    let currentResults = [];
+
+    function formatResult(r) {
+      const parts = [];
+      if (r.BUILDING && r.BUILDING !== 'NIL') parts.push(r.BUILDING);
+      if (r.ADDRESS && r.ADDRESS !== 'NIL') parts.push(r.ADDRESS);
+      const postal = (r.POSTAL && r.POSTAL !== 'NIL') ? r.POSTAL : '';
+      return {
+        title: parts[0] || r.SEARCHVAL || '',
+        address: (parts.length > 1 ? parts.slice(1).join(', ') : '') + (postal ? ' (' + postal + ')' : ''),
+        full: parts.join(' - ') + (postal ? ' (' + postal + ')' : '')
+      };
+    }
+
+    function renderResults(results) {
+      currentResults = results;
+      activeIndex = -1;
+      if (!results.length) {
+        searchResults.style.display = 'none';
+        return;
+      }
+      searchResults.innerHTML = '';
+      results.forEach((r, i) => {
+        const fmt = formatResult(r);
+        const div = document.createElement('div');
+        div.className = 'search-result-item';
+        div.innerHTML = '<div class="result-title">' + escapeHtml(fmt.title) + '</div>'
+          + (fmt.address ? '<div class="result-addr">' + escapeHtml(fmt.address) + '</div>' : '');
+        div.addEventListener('click', () => selectResult(i));
+        div.addEventListener('mouseenter', () => {
+          activeIndex = i;
+          highlightActive();
+        });
+        searchResults.appendChild(div);
+      });
+      searchResults.style.display = 'block';
+    }
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function highlightActive() {
+      const items = searchResults.querySelectorAll('.search-result-item');
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    }
+
+    function selectResult(index) {
+      const r = currentResults[index];
+      if (!r) return;
+      const lat = parseFloat(r.LATITUDE);
+      const lng = parseFloat(r.LONGITUDE);
+      const fmt = formatResult(r);
+
+      map.flyTo([lat, lng], 17);
+
+      if (searchMarker) {
+        map.removeLayer(searchMarker);
+        searchMarker = null;
+      }
+
+      searchMarker = L.marker([lat, lng]).addTo(map);
+      const popupContent = '<b>' + escapeHtml(fmt.title) + '</b>'
+        + (fmt.address ? '<br>' + escapeHtml(fmt.address) : '')
+        + '<br><button class="delete-btn" onclick="removeSearchMarker()">Delete marker</button>';
+      searchMarker.bindPopup(popupContent).openPopup();
+
+      searchInput.value = fmt.title;
+      searchResults.style.display = 'none';
+    }
+
+    window.removeSearchMarker = function () {
+      if (searchMarker) {
+        map.removeLayer(searchMarker);
+        searchMarker = null;
+        map.closePopup();
+      }
+    };
+
+    async function doSearch(query) {
+      if (!query.trim()) {
+        searchResults.style.display = 'none';
+        return;
+      }
+      const url = 'https://www.onemap.gov.sg/api/common/elastic/search?searchVal='
+        + encodeURIComponent(query) + '&returnGeom=Y&getAddrDetails=Y&pageNum=1';
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const results = (data.results || []).slice(0, 5);
+        if (!results.length) {
+          searchResults.innerHTML = '<div class="search-result-item" style="color:#999;">No results found</div>';
+          searchResults.style.display = 'block';
+          currentResults = [];
+          return;
+        }
+        renderResults(results);
+      } catch (err) {
+        console.error(err);
+        showToast('Search failed, please try again', 'error');
+      }
+    }
+
+    // Debounced input
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => doSearch(searchInput.value), 300);
+    });
+
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      const items = searchResults.querySelectorAll('.search-result-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (activeIndex < items.length - 1) activeIndex++;
+        highlightActive();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (activeIndex > 0) activeIndex--;
+        highlightActive();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeIndex >= 0 && currentResults[activeIndex]) {
+          selectResult(activeIndex);
+        } else {
+          doSearch(searchInput.value);
+        }
+      } else if (e.key === 'Escape') {
+        searchResults.style.display = 'none';
+      }
+    });
+
+    // Close dropdown on map click
+    map.on('click', () => {
+      searchResults.style.display = 'none';
+    });
+
+    // === Screenshot ===
     const copyBtn = document.getElementById("copy-screenshot-btn");
 
     copyBtn.addEventListener("click", async () => {
       const mapEl = document.getElementById("map");
+      const toolbar = document.getElementById("toolbar");
 
-      // 要临时隐藏的元素（搜索框、opacity 控制、所有按钮/控件）
-      const toHide = [
-        document.getElementById("search-box"),
-        document.getElementById("opacity-control"),
-        document.getElementById("copy-screenshot-btn"),
-        //...document.querySelectorAll(".leaflet-control")  // Leaflet 默认控件（zoom, draw toolbar等）
-      ];
-
-      // 记录原来的 visibility，方便恢复
-      const originalVisibility = new Map();
-      toHide.forEach(el => {
-        if (el) {
-          originalVisibility.set(el, el.style.visibility);
-          el.style.visibility = "hidden";
-        }
-      });
+      toolbar.style.visibility = "hidden";
 
       try {
-        const canvas = await html2canvas(mapEl, {
-          useCORS: true
-        });
+        const canvas = await html2canvas(mapEl, { useCORS: true });
+        toolbar.style.visibility = "";
 
-        // 截回来了以后先恢复 UI
-        toHide.forEach(el => {
-          if (el) {
-            el.style.visibility = originalVisibility.get(el) || "";
-          }
-        });
-
-        // 尝试复制到剪贴板（需要 https & 支持 Clipboard API 的浏览器）
         canvas.toBlob(async (blob) => {
           if (!blob) return;
-
           if (navigator.clipboard && window.ClipboardItem) {
             try {
-              const item = new ClipboardItem({ [blob.type]: blob });
-              await navigator.clipboard.write([item]);
-              alert("Screenshot copied to clipboard!");
+              await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+              showToast("Screenshot copied to clipboard!");
             } catch (err) {
               console.error("Clipboard write failed:", err);
-              // 失败则打开新标签页
-              const url = canvas.toDataURL("image/png");
-              window.open(url, "_blank");
+              window.open(canvas.toDataURL("image/png"), "_blank");
             }
           } else {
-            // 不支持剪贴板，就直接打开图片
-            const url = canvas.toDataURL("image/png");
-            window.open(url, "_blank");
+            window.open(canvas.toDataURL("image/png"), "_blank");
           }
         }, "image/png");
       } catch (err) {
         console.error("Screenshot failed:", err);
-        // 出错也要恢复 UI
-        toHide.forEach(el => {
-          if (el) {
-            el.style.visibility = originalVisibility.get(el) || "";
-          }
-        });
-        alert("Screenshot failed, please try again.");
+        toolbar.style.visibility = "";
+        showToast("Screenshot failed, please try again", "error");
       }
     });
   </script>
